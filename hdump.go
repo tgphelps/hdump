@@ -1,10 +1,13 @@
 // Package hdump dumps data in the traditional hex/ASCII format.
 package hdump
 
+// version 0.1.0
+
 import (
 	"fmt"
 	"io"
 	"log"
+	"unsafe"
 )
 
 // Hdumper contains all context needed to dump data.
@@ -33,46 +36,65 @@ func (h *Hdumper) SetHexOnly(b bool) {
 }
 
 // DumpBytes dumps 'size' bytes from the slice 'buff'.
-func (h *Hdumper) DumpBytes(size int, buff []byte) error {
+func (h *Hdumper) DumpBytes(size int, buff []byte) {
 	offset := 0
 	for size > 0 {
 		this := min(size, 16)
-		err := h.dump16(buff[offset:offset+this], this)
-		if err != nil {
-			return err
-		}
+		h.dump16(buff[offset:offset+this], this)
 		offset += this
 		size -= this
 		if size < 0 {
 			log.Fatal("size went negative")
 		}
 	}
-	return nil
+}
+
+// DumpInt32s dumps 'size' int32s from the slice 'buff'.
+func (h *Hdumper) DumpInt32s(size int, buff []int32) {
+	offset := 0
+	for size > 0 {
+		this := min(size, 8)
+		h.dump8ints(buff[offset:offset+this], this)
+		offset += this
+		size -= this
+		if size < 0 {
+			log.Fatal("size went negative")
+		}
+	}
 }
 
 // dump16 prints the next line of up to 16 bytes dumped.
-func (h *Hdumper) dump16(buff []byte, n int) error {
+func (h *Hdumper) dump16(buff []byte, n int) {
 	fmt.Fprintf(h.dest, "%08x ", h.offset)
 	h.offset += 16
 	buff = buff[:n]
 	for _, b := range buff {
 		fmt.Fprintf(h.dest, "%02x ", b)
 	}
-	if h.hexOnly {
-		fmt.Fprintf(h.dest, "\n")
-		return nil
-	}
-	if n < 16 {
-		for i := n; i < 16; i++ {
-			fmt.Fprint(h.dest, "   ")
+	if !h.hexOnly {
+		if n < 16 {
+			for i := n; i < 16; i++ {
+				fmt.Fprint(h.dest, "   ")
+			}
 		}
+		fmt.Fprint(h.dest, "  ")
+		for _, b := range buff {
+			fmt.Fprint(h.dest, asc(b))
+		}
+		fmt.Fprintf(h.dest, "\n")
 	}
-	fmt.Fprint(h.dest, "  ")
-	for _, b := range buff {
-		fmt.Fprint(h.dest, asc(b))
+}
+
+// dump8ints prints the next line of up to 8 ints dumped.
+func (h *Hdumper) dump8ints(buff []int32, n int) {
+	fmt.Fprintf(h.dest, "%08x ", h.offset)
+	h.offset += 8
+	buff = buff[:n]
+	for _, i := range buff {
+		j := *((*uint32)(unsafe.Pointer(&i)))
+		fmt.Fprintf(h.dest, "%08x ", j)
 	}
 	fmt.Fprintf(h.dest, "\n")
-	return nil
 }
 
 // asc returns the printable version of a byte.
